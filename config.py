@@ -11,3 +11,4 @@ class Config:
     model_savepath: str = "resources/model.npz"
     char_to_idx_path: str = "resources/char_to_idx.pkl"
     sample_length:int = 500
+    batch_size: int = 32

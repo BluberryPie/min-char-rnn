@@ -39,21 +39,30 @@ if __name__ == "__main__":
         hidden_size=config.hidden_size,
         output_size=vocab_size)
     
-    num_chunks = len(raw_text) // config.seq_length
+    # Divide the raw text into partitions for batch processing
+    partition_size = (len(raw_text) - 1) // config.batch_size  # -1 to ensure no OOB
+    partition_starting_offsets = [i * partition_size for i in range(config.batch_size)]
+    logging.debug(f"{partition_starting_offsets=}")
+
     for epoch in range(config.num_epochs):
         epoch_loss = 0.0
-        h_prev = np.zeros((model.hidden_size, 1))
+        h_prevs = np.zeros((model.hidden_size, config.batch_size))
 
-        pbar = tqdm(range(num_chunks), desc=f"Epoch {epoch + 1}/{config.num_epochs}", unit="chunk")
+        pbar = tqdm(range(partition_size // config.seq_length),
+                    desc=f"Epoch {epoch + 1}/{config.num_epochs}", unit="chunk")
         for chunk in pbar:
-            start_idx = chunk * config.seq_length
-            end_idx = start_idx + config.seq_length
-            inputs = [char_to_idx[char] for char in raw_text[start_idx:end_idx]]
-            targets = [char_to_idx[char] for char in raw_text[start_idx + 1:end_idx + 1]]
-            
+            # Inputs and Targets are now lists of lists, where each inner list corresponds to a batch
+            inputs: list[list[int]] = []
+            targets: list[list[int]] = []
+            for offset in partition_starting_offsets:
+                start_idx = offset + chunk * config.seq_length
+                end_idx = start_idx + config.seq_length
+                inputs.append([char_to_idx[char] for char in raw_text[start_idx:end_idx]])
+                targets.append([char_to_idx[char] for char in raw_text[start_idx + 1:end_idx + 1]])
+
             # Forward pass through the RNN
-            xs, hs, ps, loss = model.forward(inputs, targets, h_prev)
-            h_prev = hs[config.seq_length - 1]
+            xs, hs, ps, loss = model.forward(inputs, targets, h_prevs)
+            h_prevs = hs[config.seq_length - 1]
             epoch_loss += loss
             pbar.set_postfix(loss=f"{loss:.4f}")
 
@@ -62,7 +71,7 @@ if __name__ == "__main__":
 
             # Update model parameters using the computed gradients
             model.update(dWxh, dWhh, dWhy, dbh, dby, config.learning_rate)
-
+        
         logging.info(f"Epoch {epoch + 1}/{config.num_epochs}, Loss: {epoch_loss:.4f}")
     
     # Save the trained model parameters to a file
