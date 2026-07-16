@@ -50,7 +50,7 @@ python train.py --debug
 python sample.py
 ```
 
-Loads the saved model and mapping, then generates and prints `config.sample_length` characters starting from the seed character `"A"`.
+Loads the saved model and mapping, then generates and prints `config.sample_length` characters starting from the seed character the user has provided.
 
 ## Configuration
 
@@ -70,4 +70,4 @@ All hyperparameters live in `config.py`:
 
 ## Notes
 
-This project is primarily a learning exercise for understanding how RNNs, backpropagation through time. Everything is implemented without autograd or deep learning libraries such as PyTorch.
+This project is primarily a learning exercise for understanding how RNNs work and backpropagation through time(BPTT). Everything is implemented without autograd or deep learning libraries such as PyTorch.
