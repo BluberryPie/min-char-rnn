@@ -66,6 +66,7 @@ All hyperparameters live in `config.py`:
 | `model_savepath` | Where to save trained weights | `resources/model.npz` |
 | `char_to_idx_path` | Where to save the char/index mapping | `resources/char_to_idx.pkl` |
 | `sample_length` | Number of characters to sample | `500` |
+| `batch_size` | Number of parallel sequences per training step | `32` |
 
 ## Notes
 
