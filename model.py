@@ -20,32 +20,42 @@ class RNN:
         self.mbh = np.zeros_like(self.bh)
         self.mby = np.zeros_like(self.by)
     
-    def forward(self, inputs: list[int], targets: list[int], h_prev: np.ndarray):
-        # One-hot encode the inputs
-        xs:dict[int, np.ndarray] = dict()
-        for t, index in enumerate(inputs):
-            xs[t] = np.zeros((self.input_size, 1))
-            xs[t][index] = 1
+    def forward(self, inputs: list[list[int]], targets: list[list[int]], h_prevs: np.ndarray):
+        # Get the batch/sequence size from the inputs
+        batch_size = len(inputs)
+        sequence_length = len(inputs[0])  # Assumes all sequences in the batch have the same length
         
+        # One-hot encode the inputs (Each xs[t] is a 2D array of shape (input_size, batch_size))
+        xs:dict[int, np.ndarray] = dict()
+        for t in range(sequence_length):
+            xs[t] = np.zeros((self.input_size, batch_size))
+            for b in range(batch_size):
+                xs[t][inputs[b][t], b] = 1  # One-hot encoding for each sequence in the batch
+
         # Forward pass through the RNN
         loss: float = 0.0
         hs: dict[int, np.ndarray] = dict()
         ps: dict[int, np.ndarray] = dict()
-        hs[-1] = h_prev
+        hs[-1] = h_prevs
         for t, x in xs.items():
             hs[t] = np.tanh(self.Wxh @ x + self.Whh @ hs[t - 1] + self.bh)
             y = self.Why @ hs[t] + self.by
             # Numerical stability for softmax
-            ps[t] = np.exp(y - np.max(y)) / np.sum(np.exp(y - np.max(y)))
-            loss += -np.log(ps[t][targets[t], 0])
+            numerator = np.exp(y - np.max(y, axis=0))
+            denominator = np.sum(np.exp(y - np.max(y, axis=0)), axis=0)
+            ps[t] = numerator / denominator
+            target_indices = np.array([targets[b][t] for b in range(batch_size)])
+            loss += -np.log(ps[t][target_indices, np.arange(batch_size)]).sum()  # Cross-entropy loss for the batch
         
         return xs, hs, ps, loss
 
     def backward(self, xs, hs, ps, targets):
+        batch_size = len(targets)
+        
         dy: dict[int, np.ndarray] = dict()
         dby = np.zeros_like(self.by)
         dWhy = np.zeros_like(self.Why)
-        dh_next = np.zeros((self.hidden_size, 1))  # Grad from next time step
+        dh_next = np.zeros((self.hidden_size, batch_size))  # Grad from next time step
         dbh = np.zeros_like(self.bh)
         dWhh = np.zeros_like(self.Whh)
         dWxh = np.zeros_like(self.Wxh)
@@ -53,14 +63,15 @@ class RNN:
         for t in reversed(xs):
             # Compute gradient for logits(y)
             dy[t] = ps[t]
-            dy[t][targets[t]] -= 1
+            for b in range(batch_size):
+                dy[t][targets[b][t], b] -= 1
             # Compute gradient for by and Why
-            dby += dy[t]
+            dby += dy[t].sum(axis=1, keepdims=True)
             dWhy += dy[t] @ hs[t].T
             # Compute gradient for bh, Whh, Wxh
             dh = self.Why.T @ dy[t] + dh_next
             dh_raw = (1 - hs[t] ** 2) * dh  # Grad through tanh
-            dbh += dh_raw
+            dbh += dh_raw.sum(axis=1, keepdims=True)
             dWhh += dh_raw @ hs[t - 1].T
             dWxh += dh_raw @ xs[t].T
             # Update dh_next for next iteration
